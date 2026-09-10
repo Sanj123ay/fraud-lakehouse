@@ -189,9 +189,12 @@ services:
     networks: [fraudnet]
     command:
       - "postgres"
-      - "-c" "wal_level=logical"
-      - "-c" "max_wal_senders=10"
-      - "-c" "max_replication_slots=10"
+      - "-c"
+      - "wal_level=logical"
+      - "-c"
+      - "max_wal_senders=10"
+      - "-c"
+      - "max_replication_slots=10"
     environment:
       POSTGRES_USER: ${SOURCE_DB_USER:-shop}
       POSTGRES_PASSWORD: ${SOURCE_DB_PASSWORD:-shop}
