@@ -222,16 +222,15 @@ services:
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER:-airflow}:${POSTGRES_PASSWORD:-airflow}@postgres:5432/${AIRFLOW_META_DB:-airflow_meta}
       _AIRFLOW_WWW_USER_USERNAME: ${_AIRFLOW_WWW_USER_USERNAME:-admin}
       _AIRFLOW_WWW_USER_PASSWORD: ${_AIRFLOW_WWW_USER_PASSWORD:-admin}
-      _AIRFLOW_DB_UPGRADE: "true"
+      _AIRFLOW_WWW_USER_FIRSTNAME: Admin
+      _AIRFLOW_WWW_USER_LASTNAME: User
+      _AIRFLOW_WWW_USER_EMAIL: admin@example.com
     ports:
       - "8085:8080"        # http://localhost:8085  (admin / admin)
     volumes:
       - ./airflow/dags:/opt/airflow/dags
       - ./spark_jobs:/opt/airflow/spark_jobs   # so Airflow can submit our jobs
-    command: >
-      bash -c "airflow db migrate &&
-               airflow webserver &
-               airflow scheduler"
+    command: ["bash", "/opt/airflow/start-platform.sh"]
 
   # --------------------------------------------------------------------------
   # REDIS — the online feature store / prediction cache.

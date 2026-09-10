@@ -19,3 +19,7 @@ RUN pip install --no-cache-dir \
       pyspark==3.5.1 \
       apache-airflow-providers-apache-spark==4.7.1 \
       psycopg2-binary==2.9.9
+# Idempotent local startup: migrate metadata, create/reset the configured UI
+# admin, then launch both Airflow components.
+COPY --chown=airflow:root start-platform.sh /opt/airflow/start-platform.sh
+RUN chmod 0755 /opt/airflow/start-platform.sh
