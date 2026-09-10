@@ -1,0 +1,242 @@
+# ============================================================================
+#  docker-compose.yml — THE WHOLE PLATFORM AS CODE
+#
+#  One file that describes 11 containers and how they network together.
+#  Start order matters (depends_on), all containers share one private
+#  network called "fraudnet" so they can talk to each other by name
+#  (e.g. Spark can reach Kafka at the hostname "kafka").
+#
+#  Run:   docker compose up -d --build      (or simply: make up)
+# ============================================================================
+
+name: fraud-lakehouse
+
+networks:
+  fraudnet:
+    driver: bridge
+
+volumes:
+  minio_data:
+  pg_ops_data:
+  pg_source_data:
+
+services:
+
+  # --------------------------------------------------------------------------
+  # KAFKA (KRaft mode = modern Kafka, NO Zookeeper needed anymore)
+  # The message backbone. NiFi publishes, Spark subscribes, Debezium publishes.
+  # --------------------------------------------------------------------------
+  kafka:
+    image: confluentinc/cp-kafka:7.6.1
+    hostname: kafka
+    container_name: kafka
+    networks: [fraudnet]
+    ports:
+      - "9092:9092"        # for tools on your laptop (outside Docker)
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:29093
+      KAFKA_LISTENERS: PLAINTEXT://kafka:29092,CONTROLLER://kafka:29093,PLAINTEXT_HOST://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+      # Internal note: containers talk to Kafka at  kafka:29092
+      #                your laptop talks to it at  localhost:9092
+
+  # --------------------------------------------------------------------------
+  # KAFKA CONNECT + DEBEZIUM  (this is the CDC engine — the extra module)
+  # Watches the bank source DB and streams row changes into Kafka topics.
+  # Managed via a REST API on port 8083 (see cdc/register_connector.sh).
+  # --------------------------------------------------------------------------
+  connect:
+    image: debezium/connect:2.5
+    container_name: connect
+    networks: [fraudnet]
+    depends_on: [kafka, postgres-source]
+    ports:
+      - "8083:8083"
+    environment:
+      BOOTSTRAP_SERVERS: kafka:29092
+      GROUP_ID: "1"
+      CONFIG_STORAGE_TOPIC: connect_configs
+      OFFSET_STORAGE_TOPIC: connect_offsets
+      STATUS_STORAGE_TOPIC: connect_status
+      CONNECT_KEY_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      CONNECT_VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      CONNECT_KEY_CONVERTER_SCHEMAS_ENABLE: "false"
+      CONNECT_VALUE_CONVERTER_SCHEMAS_ENABLE: "false"
+
+  # --------------------------------------------------------------------------
+  # NIFI — the "no-code" ingestion tool. We configure a flow in its web UI
+  # (GenerateFlowFile with a Groovy script -> PublishKafka) to simulate the
+  # outside world firing credit-card transactions at us.
+  # --------------------------------------------------------------------------
+  nifi:
+    image: apache/nifi:1.25.0
+    container_name: nifi
+    networks: [fraudnet]
+    depends_on: [kafka]
+    ports:
+      - "8090:8080"        # http://localhost:8090/nifi
+    environment:
+      NIFI_WEB_HTTP_PORT: "8080"
+    volumes:
+      - ./nifi/scripts:/opt/nifi/nifi-current/scripts
+
+  # --------------------------------------------------------------------------
+  # MINIO — local S3 object storage. This is the hard drive of the lakehouse.
+  # Buckets: warehouse (Iceberg tables), models (ML artifacts), checkpoints.
+  # --------------------------------------------------------------------------
+  minio:
+    image: minio/minio:latest
+    container_name: minio
+    networks: [fraudnet]
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin123}
+    ports:
+      - "9000:9000"        # S3 API   (Spark talks to this)
+      - "9001:9001"        # Web console http://localhost:9001
+    volumes:
+      - minio_data:/data
+
+  createbuckets:           # tiny one-shot job: creates our buckets, then exits
+    image: minio/mc
+    container_name: createbuckets
+    networks: [fraudnet]
+    depends_on: [minio]
+    env_file: [.env]
+    entrypoint: >
+      /bin/sh -c "
+      sleep 5;
+      mc alias set local http://minio:9000 $${MINIO_ROOT_USER} $${MINIO_ROOT_PASSWORD};
+      mc mb -p local/warehouse local/models local/checkpoints || true;
+      echo 'Buckets ready: warehouse, models, checkpoints';
+      exit 0;
+      "
+
+  # --------------------------------------------------------------------------
+  # SPARK — the compute engine. One master + one worker (a mini cluster).
+  # The custom image (docker/spark/Dockerfile) adds Iceberg, Kafka, S3, JDBC.
+  # Official apache/spark image => no SPARK_MODE wrapper: we launch the
+  # master/worker daemons ourselves with spark-class. Runs in the foreground;
+  # `make x` job submissions land on spark://spark-master:7077.
+  # Job code is mounted at /opt/spark/jobs.
+  # --------------------------------------------------------------------------
+  spark-master:
+    build: ./docker/spark
+    container_name: spark-master
+    networks: [fraudnet]
+    depends_on: [kafka, minio]
+    env_file: [.env]
+    user: root
+    command: ["/opt/spark/bin/spark-class", "org.apache.spark.deploy.master.Master"]
+    environment:
+      SPARK_MASTER_HOST: spark-master
+    ports:
+      - "8080:8080"        # Spark master UI http://localhost:8080
+      - "7077:7077"        # Spark master RPC (jobs connect here)
+    volumes:
+      - ./spark_jobs:/opt/spark/jobs
+
+  spark-worker:
+    build: ./docker/spark
+    container_name: spark-worker
+    networks: [fraudnet]
+    depends_on: [spark-master]
+    env_file: [.env]
+    user: root
+    command: ["/opt/spark/bin/spark-class", "org.apache.spark.deploy.worker.Worker", "spark://spark-master:7077"]
+    environment:
+      SPARK_WORKER_MEMORY: 2G
+      SPARK_WORKER_CORES: "2"
+    volumes:
+      - ./spark_jobs:/opt/spark/jobs
+
+  # --------------------------------------------------------------------------
+  # POSTGRES (ops) — two databases in one server:
+  #   airflow_meta : Airflow's own bookkeeping
+  #   fraud_ops    : OUR app data (predictions table lives here)
+  # --------------------------------------------------------------------------
+  postgres:
+    image: postgres:15-alpine
+    container_name: postgres-ops
+    hostname: postgres
+    networks: [fraudnet]
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-airflow}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-airflow}
+      POSTGRES_DB: ${AIRFLOW_META_DB:-airflow_meta}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_ops_data:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d
+
+  # --------------------------------------------------------------------------
+  # POSTGRES (source) — pretends to be the bank's core banking system.
+  # Configured with wal_level=logical so Debezium can do CDC on it.
+  # Reachable from your laptop on port 5433 (to not clash with ops DB 5432).
+  # --------------------------------------------------------------------------
+  postgres-source:
+    image: postgres:15-alpine
+    container_name: postgres-source
+    networks: [fraudnet]
+    command:
+      - "postgres"
+      - "-c" "wal_level=logical"
+      - "-c" "max_wal_senders=10"
+      - "-c" "max_replication_slots=10"
+    environment:
+      POSTGRES_USER: ${SOURCE_DB_USER:-shop}
+      POSTGRES_PASSWORD: ${SOURCE_DB_PASSWORD:-shop}
+      POSTGRES_DB: ${SOURCE_DB_NAME:-shopdb}
+    ports:
+      - "5433:5432"
+    volumes:
+      - pg_source_data:/var/lib/postgresql/data
+      - ./docker/postgres-source/init:/docker-entrypoint-initdb.d
+
+  # --------------------------------------------------------------------------
+  # AIRFLOW — the orchestrator. Runs the nightly training DAG and the
+  # Iceberg maintenance DAG. Custom image adds a spark-submit client so
+  # DAGs can fire Spark jobs at the cluster.
+  # --------------------------------------------------------------------------
+  airflow:
+    build: ./docker/airflow
+    container_name: airflow
+    networks: [fraudnet]
+    depends_on: [postgres, spark-master]
+    env_file: [.env]
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER:-airflow}:${POSTGRES_PASSWORD:-airflow}@postgres:5432/${AIRFLOW_META_DB:-airflow_meta}
+      _AIRFLOW_WWW_USER_USERNAME: ${_AIRFLOW_WWW_USER_USERNAME:-admin}
+      _AIRFLOW_WWW_USER_PASSWORD: ${_AIRFLOW_WWW_USER_PASSWORD:-admin}
+      _AIRFLOW_DB_UPGRADE: "true"
+    ports:
+      - "8085:8080"        # http://localhost:8085  (admin / admin)
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./spark_jobs:/opt/airflow/spark_jobs   # so Airflow can submit our jobs
+    command: >
+      bash -c "airflow db migrate &&
+               airflow webserver &
+               airflow scheduler"
+
+  # --------------------------------------------------------------------------
+  # REDIS — the online feature store / prediction cache.
+  # Streaming job writes "latest fraud score per card" here for ms lookups.
+  # --------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    networks: [fraudnet]
+    ports:
+      - "6379:6379"

@@ -1,0 +1,30 @@
+# ---- Secrets & local settings (NEVER commit real .env files) ----
+.env
+*.local
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# ---- Airflow local clutter ----
+airflow/logs/
+airflow/plugins/__pycache__/
+
+# ---- Spark / Ivy / checkpoints (runtime clutter) ----
+.spark-ivy/
+metastore_db/
+derby.log
+spark-warehouse/
+
+# ---- OS / editor noise ----
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# ---- Logs ----
+*.log
+logs/

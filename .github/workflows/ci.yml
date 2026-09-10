@@ -1,0 +1,47 @@
+# ============================================================================
+#  GitHub Actions CI — free automated checks on every push / pull request.
+#  Watch results in your repo's "Actions" tab on GitHub.
+#  (This is the thing that makes recruiters/teams trust a repo.)
+# ============================================================================
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+
+  python-syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Compile-check every Python file (jobs, DAGs, scripts)
+        run: python -m compileall spark_jobs airflow scripts
+
+  compose-config:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate docker-compose.yml renders correctly
+        run: |
+          cp .env.example .env
+          docker compose -f docker-compose.yml config -q
+
+  yaml-json-sanity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Parse all JSON configs
+        run: |
+          python - <<'EOF'
+          import json, pathlib
+          for p in pathlib.Path(".").rglob("*.json"):
+              json.loads(p.read_text())
+              print("json ok:", p)
+          EOF

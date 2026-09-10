@@ -1,0 +1,5 @@
+# Python deps for LOCAL development / linting only.
+# Inside Docker these already live in the custom spark image (docker/spark/Dockerfile).
+pyspark==3.5.1
+redis==5.0.8
+pandas==2.2.2

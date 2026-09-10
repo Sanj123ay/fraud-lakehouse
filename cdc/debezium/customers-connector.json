@@ -1,0 +1,29 @@
+{
+  "name": "shopdb-connector",
+  "config": {
+    "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+
+    "database.hostname": "postgres-source",
+    "database.port": "5432",
+    "database.user": "shop",
+    "database.password": "shop",
+    "database.dbname": "shopdb",
+
+    "topic.prefix": "cdc",
+    "table.include.list": "public.customers,public.merchants",
+
+    "plugin.name": "pgoutput",
+    "slot.name": "debezium_slot",
+    "publication.name": "debezium_pub",
+
+    "key.converter": "org.apache.kafka.connect.json.JsonConverter",
+    "value.converter": "org.apache.kafka.connect.json.JsonConverter",
+    "key.converter.schemas.enable": "false",
+    "value.converter.schemas.enable": "false",
+
+    "transforms": "unwrap",
+    "transforms.unwrap.type": "io.debezium.transforms.ExtractNewRecordState",
+    "transforms.unwrap.delete.handling.mode": "rewrite",
+    "transforms.unwrap.drop.tombstones": "false"
+  }
+}
