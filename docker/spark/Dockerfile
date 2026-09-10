@@ -18,15 +18,28 @@ USER root
 ARG MVN=https://repo1.maven.org/maven2
 ARG JARS=/opt/spark/jars
 
-# Tools the plain official image doesn't ship (curl for downloads, pip for pips)
+# Tools the plain official image doesn't ship.
+# python3-venv is important: Ubuntu marks its system Python as externally
+# managed (PEP 668), so packages must be installed in an isolated environment.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends curl ca-certificates python3-pip \
+ && apt-get install -y --no-install-recommends curl ca-certificates python3-venv \
  && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Create one Python environment baked into both the Spark master and worker.
+# Setting these variables makes PySpark use the same interpreter for its
+# driver and executors, preventing package/version differences across nodes.
+ENV SPARK_PYTHON_ENV=/opt/spark/venv
+ENV PATH="${SPARK_PYTHON_ENV}/bin:${PATH}"
+ENV PYSPARK_PYTHON=${SPARK_PYTHON_ENV}/bin/python3
+ENV PYSPARK_DRIVER_PYTHON=${SPARK_PYTHON_ENV}/bin/python3
 
 # Python libraries available on driver AND executors (worker nodes):
 #  - redis    : streaming job writes latest-score-per-card into Redis
 #  - pandas   : used by windowed/feature code paths
-RUN pip3 install --no-cache-dir redis==5.0.8 pandas==2.2.2
+RUN python3 -m venv ${SPARK_PYTHON_ENV} \
+ && ${SPARK_PYTHON_ENV}/bin/pip install --no-cache-dir --upgrade pip setuptools wheel \
+ && ${SPARK_PYTHON_ENV}/bin/pip install --no-cache-dir redis==5.0.8 pandas==2.2.2 \
+ && ${SPARK_PYTHON_ENV}/bin/python -c "import redis, pandas; print('Python dependencies installed successfully')"
 
 # Java libraries (exact, pinned versions, downloaded from Maven Central)
 #  - iceberg-spark-runtime : the lakehouse table format
