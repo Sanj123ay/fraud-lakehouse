@@ -29,6 +29,17 @@ ps: ## Show running containers
 topics: ## Create all Kafka topics
 	bash kafka/scripts/create_topics.sh
 
+consume-raw: ## Print 10 transaction JSON messages currently in Kafka
+	docker compose exec -T kafka kafka-console-consumer \
+		--bootstrap-server kafka:29092 --topic raw_transactions \
+		--from-beginning --max-messages 10 --timeout-ms 20000
+
+verify-ingestion: ## Validate 10 Kafka transactions against the data contract
+	docker compose exec -T kafka kafka-console-consumer \
+		--bootstrap-server kafka:29092 --topic raw_transactions \
+		--from-beginning --max-messages 10 --timeout-ms 20000 \
+		| python3 scripts/validate_transactions.py
+		
 register-cdc: ## Activate the Debezium CDC connector
 	bash cdc/register_connector.sh
 
