@@ -44,6 +44,7 @@ import org.apache.nifi.processor.io.OutputStreamCallback
 import java.nio.charset.StandardCharsets
 import java.time.Instant
 import java.time.temporal.ChronoUnit
+import java.util.UUID
 import java.util.concurrent.ThreadLocalRandom
 def flowFile = session.get()
 if (flowFile == null) {
