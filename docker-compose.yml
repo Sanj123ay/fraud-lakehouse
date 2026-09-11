@@ -84,8 +84,9 @@ services:
       - "8090:8080"        # http://localhost:8090/nifi
     environment:
       NIFI_WEB_HTTP_PORT: "8080"
+      SIMULATED_FRAUD_RATE: ${SIMULATED_FRAUD_RATE:-0.06}
     volumes:
-      - ./nifi/scripts:/opt/nifi/nifi-current/scripts
+      - ./nifi/scripts:/opt/nifi/nifi-current/scripts:ro
 
   # --------------------------------------------------------------------------
   # MINIO — local S3 object storage. This is the hard drive of the lakehouse.
