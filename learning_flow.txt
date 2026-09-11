@@ -1,0 +1,7 @@
+1. Readme and all
+
+2. all the docker files and docker compose files
+
+3. nifi folder Readme
+
+4. 
