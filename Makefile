@@ -46,11 +46,18 @@ register-cdc: ## Activate the Debezium CDC connector
 seed: ## Insert/refresh customers+merchants in the bank DB (triggers CDC)
 	python3 scripts/seed_customers.py
 
-stream: ## Start Spark streaming job1 (transactions -> features -> predictions)
+stream: ## Run Step 3 stream in foreground (Ctrl+C stops it safely)
 	docker compose exec spark-master /opt/spark/bin/spark-submit \
 		--master spark://spark-master:7077 \
+		--total-executor-cores 1 --executor-cores 1 \
+		--executor-memory 1g --driver-memory 1g \
 		/opt/spark/jobs/streaming/job1_streaming_features.py
-
+inspect-step3: ## Show Iceberg counts, latest features, quarantine, snapshots
+	docker compose exec spark-master /opt/spark/bin/spark-submit \
+		--master spark://spark-master:7077 \
+		--total-executor-cores 1 --executor-cores 1 \
+		--executor-memory 768m --driver-memory 768m \
+		/opt/spark/jobs/tools/inspect_step3.py
 cdc-sync: ## Start Spark streaming job3 (CDC -> Iceberg dimension MERGE)
 	docker compose exec spark-master /opt/spark/bin/spark-submit \
 		--master spark://spark-master:7077 \
