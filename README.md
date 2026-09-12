@@ -97,6 +97,7 @@ project1_fraud/
 │   ├── 01_architecture.md         <- every service explained + port map
 │   ├── 02_github_guide.md         <- git & GitHub from zero: first push walkthrough
 │   └── 03_cdc_explained.md        <- what CDC is and how Debezium fits in here
+|   └── 04_step3_spark_streaming.md <- Kafka → watermark → features → Iceberg runbook
 │
 ├── docker/                        <- custom Docker images we build ourselves
 │   ├── spark/Dockerfile           <- Spark 3.5 + Iceberg + Kafka + S3 + JDBC jars
