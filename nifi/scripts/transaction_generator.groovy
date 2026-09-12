@@ -133,7 +133,7 @@ try {
     // Same-card events then consistently hash to the same Kafka partition.
     flowFile = session.putAllAttributes(flowFile, [
         'mime.type'      : 'application/json',
-        'filename'       : "transaction-${txnId}.json",
+        'filename'       : 'transaction-${txnId}.json',
         'kafka.key'      : cardId,
         'transaction.id' : txnId,
         'data.source'    : 'nifi-simulator',
