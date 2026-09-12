@@ -100,16 +100,18 @@ services:
       - nifi_flowfile_repository:/opt/nifi/nifi-current/flowfile_repository
       - nifi_content_repository:/opt/nifi/nifi-current/content_repository
       - nifi_provenance_repository:/opt/nifi/nifi-current/provenance_repository
-
+      
   # --------------------------------------------------------------------------
   # MINIO — local S3 object storage. This is the hard drive of the lakehouse.
+  # MinIO stopped publishing free images to Docker Hub in Oct 2025. Chainguard
+  # continuously builds MinIO from source and makes this starter image public.
   # Buckets: warehouse (Iceberg tables), models (ML artifacts), checkpoints.
   # --------------------------------------------------------------------------
   minio:
-    image: minio/minio:latest
+    image: cgr.dev/chainguard/minio@sha256:039800e64ec7247d2fde7cff3697e964f6fe20b6d7d2c46aa7d82cc63355d512
     container_name: minio
     networks: [fraudnet]
-    command: server /data --console-address ":9001"
+    command: ["server", "/data", "--console-address", ":9001"]
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin123}
@@ -118,21 +120,27 @@ services:
       - "9001:9001"        # Web console http://localhost:9001
     volumes:
       - minio_data:/data
-
   createbuckets:           # tiny one-shot job: creates our buckets, then exits
-    image: minio/mc
+    # -dev is intentional: this one-shot init container needs /bin/sh. Its
+    # retry loop is also our readiness probe for the real S3 API.
+    image: cgr.dev/chainguard/minio-client@sha256:fb635b967f5f32424391150dac4985cc1aea78fb0a1ce031c01952cf661a13ec
+
     container_name: createbuckets
     networks: [fraudnet]
     depends_on: [minio]
     env_file: [.env]
-    entrypoint: >
-      /bin/sh -c "
-      sleep 5;
-      mc alias set local http://minio:9000 $${MINIO_ROOT_USER} $${MINIO_ROOT_PASSWORD};
-      mc mb -p local/warehouse local/models local/checkpoints || true;
-      echo 'Buckets ready: warehouse, models, checkpoints';
-      exit 0;
-      "
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -eu
+        until mc alias set local http://minio:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}"; do
+          echo "Waiting for MinIO..."
+          sleep 2
+        done
+        mc mb --ignore-existing local/warehouse
+        mc mb --ignore-existing local/models
+        mc mb --ignore-existing local/checkpoints
+        echo "Buckets ready: warehouse, models, checkpoints"
 
   # --------------------------------------------------------------------------
   # SPARK — the compute engine. One master + one worker (a mini cluster).

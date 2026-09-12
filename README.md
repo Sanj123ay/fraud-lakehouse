@@ -174,6 +174,10 @@ Each step builds on the previous one and explains *why* before *how*.
 
 ## 8. FAQ (newbie edition)
 
+- **Saw `pull access denied for minio/minio`?** MinIO stopped publishing free
+  community images to Docker Hub in October 2025. This repo uses maintained,
+  public **Chainguard MinIO** server/client images from `cgr.dev`, pinned by
+  immutable multi-architecture digests. Docker Hub login cannot fix the old URL.
 - **Saw an error about `bitnami/spark` not found?** That was fixed in the repo —
   Bitnami removed their free versioned images from Docker Hub in 2025, so we use
   the **official `apache/spark` image** (see `docker/spark/Dockerfile`). Always
