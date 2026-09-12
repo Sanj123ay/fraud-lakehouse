@@ -278,14 +278,20 @@ def read_and_parse_kafka(spark: SparkSession, settings: Settings) -> DataFrame:
         F.when(F.col("merchant_id").isNull(), F.lit("missing merchant_id")),
         F.when(F.col("amount").isNull() | (F.col("amount") <= 0), F.lit("amount must be positive")),
         F.when(F.col("currency").isNull(), F.lit("missing currency")),
-        F.when(F.col("country").isNull(), F.lit("missing country")),
-        F.when(~F.col("channel").isin("pos", "ecom", "atm"), F.lit("unsupported channel")),
+         F.when(F.col("country").isNull(), F.lit("missing country")),
+        F.when(
+            F.col("channel").isNull() | ~F.col("channel").isin("pos", "ecom", "atm"),
+            F.lit("channel must be pos, ecom, or atm"),
+        ),
         F.when(F.col("event_time").isNull(), F.lit("txn_ts is not a timestamp")),
         F.when(
             F.col("event_time") > F.expr("current_timestamp() + INTERVAL 5 MINUTES"),
             F.lit("txn_ts is more than 5 minutes in the future"),
         ),
-        F.when(~F.col("is_fraud").isin(0, 1), F.lit("is_fraud must be 0 or 1")),
+        F.when(
+            F.col("is_fraud").isNull() | ~F.col("is_fraud").isin(0, 1),
+            F.lit("is_fraud must be 0 or 1"),
+        ),
     ]
     return parsed.withColumn("validation_error", F.concat_ws(" | ", *checks))
 def enrich_with_dimensions(batch: DataFrame, spark: SparkSession, settings: Settings) -> DataFrame:
