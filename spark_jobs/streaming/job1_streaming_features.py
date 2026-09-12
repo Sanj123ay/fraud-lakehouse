@@ -372,22 +372,22 @@ def calculate_affected_features(
         .dropDuplicates(["txn_id"])
         .persist(StorageLevel.MEMORY_AND_DISK)
     )
-    new_events = F.broadcast(
-        incoming.select(
-            F.col("card_id").alias("new_card_id"),
-            F.col("event_time").alias("new_event_time"),
-        ).distinct()
+     # Collapse the incoming rows to one affected horizon per card. This avoids
+    # an expensive event-by-event range join while remaining correct: any new
+    # event can affect features from its own time through one hour later.
+    affected_ranges = F.broadcast(
+        incoming.groupBy("card_id").agg(
+            F.min("event_time").alias("affected_from"),
+            (F.max("event_time") + F.expr("INTERVAL 1 HOUR")).alias("affected_to"),
+        )
     )
     affected_keys = (
-        history.alias("h")
-        .join(
-            new_events.alias("n"),
-            (F.col("h.card_id") == F.col("n.new_card_id"))
-            & (F.col("h.event_time") >= F.col("n.new_event_time"))
-            & (F.col("h.event_time") <= F.col("n.new_event_time") + F.expr("INTERVAL 1 HOUR")),
-            "inner",
+        history.join(affected_ranges, "card_id", "inner")
+        .where(
+            (F.col("event_time") >= F.col("affected_from"))
+            & (F.col("event_time") <= F.col("affected_to"))
         )
-        .select(F.col("h.txn_id").alias("txn_id"))
+        .select("txn_id")
         .distinct()
     )
     ordered = history.withColumn("_event_epoch", F.col("event_time").cast("long"))
