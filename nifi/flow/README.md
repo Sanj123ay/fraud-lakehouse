@@ -72,7 +72,7 @@ docker compose ps nifi kafka
 ```
 If you do not have `make`, use:
 ```bash
-bash kafka/scripts/create_topics.sh
+wsl -d Ubuntu bash kafka/scripts/create_topics.sh raw_transactions 3
 ```
 Wait until this returns HTTP 200 (NiFi can take 60–90 seconds after startup):
 ```bash
