@@ -195,12 +195,7 @@ make consume-raw
 ```
 Without `make`:
 ```bash
-docker compose exec -T kafka kafka-console-consumer \
-  --bootstrap-server kafka:29092 \
-  --topic raw_transactions \
-  --from-beginning \
-  --max-messages 10 \
-  --timeout-ms 20000
+docker compose exec -T kafka kafka-console-consumer --bootstrap-server kafka:29092 --topic raw_transactions --from-beginning --max-messages 10 --timeout-ms 20000
 ```
 You should see ten one-line JSON objects. The command exits after ten; it does
 not stop NiFi or delete Kafka messages.
@@ -216,12 +211,8 @@ PASS: validated 10 schema-compatible Kafka transactions.
 A random ten-row sample may contain zero fraud records. At 6%, that is normal.
 ### Check topic partitions and offsets
 ```bash
-docker compose exec kafka kafka-topics \
-  --bootstrap-server kafka:29092 \
-  --describe --topic raw_transactions
-docker compose exec kafka kafka-get-offsets \
-  --bootstrap-server kafka:29092 \
-  --topic raw_transactions
+docker compose exec kafka kafka-topics --bootstrap-server kafka:29092 --describe --topic raw_transactions
+docker compose exec kafka kafka-get-offsets --bootstrap-server kafka:29092 --topic raw_transactions
 ```
 The topic should have 3 partitions, and offsets should continue increasing while
 NiFi runs.
