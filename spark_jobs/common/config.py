@@ -61,6 +61,15 @@ def build_spark(app_name: str):
         # Deterministic timestamps across developer laptops and containers.
         .config("spark.sql.session.timeZone", "UTC")
         .config("spark.sql.shuffle.partitions", os.getenv("SPARK_SHUFFLE_PARTITIONS", "4"))
+        # Spark master reverse-proxies this driver's UI under /proxy/<app-id>.
+        # Port 4040 is also published as a convenient direct fallback.
+        .config("spark.ui.enabled", "true")
+        .config("spark.ui.port", "4040")
+        .config("spark.ui.reverseProxy", "true")
+        .config(
+            "spark.ui.reverseProxyUrl",
+            os.getenv("SPARK_UI_REVERSE_PROXY_URL", "http://localhost:8080"),
+        )
         # S3A points at MinIO rather than AWS.
         .config("spark.hadoop.fs.s3a.endpoint", settings.S3_ENDPOINT)
         .config("spark.hadoop.fs.s3a.access.key", settings.S3_ACCESS_KEY)

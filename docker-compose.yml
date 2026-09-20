@@ -160,9 +160,14 @@ services:
     command: ["/opt/spark/bin/spark-class", "org.apache.spark.deploy.master.Master"]
     environment:
       SPARK_MASTER_HOST: spark-master
+      # Proxy worker/application UIs through the only hostname the laptop knows.
+      SPARK_MASTER_OPTS: >-
+        -Dspark.ui.reverseProxy=true
+        -Dspark.ui.reverseProxyUrl=http://localhost:8080
     ports:
-      - "8080:8080"        # Spark master UI http://localhost:8080
+      - "8080:8080"        # Spark master + reverse-proxied app/worker UIs
       - "7077:7077"        # Spark master RPC (jobs connect here)
+      - "4040:4040"        # Direct UI for the long-running Step 3 application
     volumes:
       - ./spark_jobs:/opt/spark/jobs
 
@@ -177,6 +182,9 @@ services:
     environment:
       SPARK_WORKER_MEMORY: 2G
       SPARK_WORKER_CORES: "2"
+      SPARK_WORKER_OPTS: >-
+        -Dspark.ui.reverseProxy=true
+        -Dspark.ui.reverseProxyUrl=http://localhost:8080
     volumes:
       - ./spark_jobs:/opt/spark/jobs
 

@@ -9,7 +9,7 @@
 | `nifi` | NiFi 1.25 | Generate fake transactions -> Kafka | UI :8090 |
 | `minio` | MinIO | S3 storage for Iceberg tables + models | UI :9001 |
 | `createbuckets` | mc | One-shot: create S3 buckets, then exits | — |
-| `spark-master` | Spark 3.5 + jars | Accept jobs, split work | UI :8080 |
+| `spark-master` | Spark 3.5 + jars | Accept jobs, split work | master/proxy :8080, live app :4040 |
 | `spark-worker` | Spark 3.5 + jars | Actually crunch the data | — |
 | `postgres` | Postgres 15 | Airflow metadata + `fraud_ops.predictions` | port 5432 |
 | `postgres-source` | Postgres 15 | Pretend bank core DB (CDC source) | port 5433 |
