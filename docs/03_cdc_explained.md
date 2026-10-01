@@ -78,17 +78,12 @@ Three new pieces make this work (all already in the repo):
 3. **It's the pattern real companies use** to keep lakehouse dimensions in
    sync with operational systems (banks, e-commerce, everywhere).
 
-## Try it (after the platform is up — built in Steps 1–4)
-
+## Step 4 Full Walkthrough
+See **`docs/05_step4_cdc_sync.md`** for the complete step-by-step instructions.
+Quick execution commands:
 ```bash
-make register-cdc          # activate the Debezium connector once
-make cdc-sync              # start the Spark MERGE job
-
-# in another terminal, edit the "bank":
-make psql-source
-UPDATE customers SET risk_segment='high', updated_at=now()
-  WHERE customer_id='CUST-001';
-
-# then query the lakehouse dim (via spark-sql) a few seconds later —
-# the row has already changed there too. That round trip IS CDC.
+make register-cdc          # activate the Debezium connector
+make cdc-sync              # start the Spark CDC sync stream (job3)
+make seed                  # start the continuous bank mutation loop
+make inspect-step4         # inspect Iceberg dimension tables and streaming joins
 ```
