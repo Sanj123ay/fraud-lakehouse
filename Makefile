@@ -67,10 +67,18 @@ inspect-step4: ## Show CDC dimension tables, snapshot history & enriched transac
 		--total-executor-cores 1 --executor-cores 1 \
 		--executor-memory 768m --driver-memory 768m \
 		/opt/spark/jobs/tools/inspect_step4.py
-train: ## Run the training job once, manually (Airflow also runs it nightly)
+train: ## Step 5: train the fraud model once (Airflow also runs it nightly)
 	docker compose exec spark-master /opt/spark/bin/spark-submit \
 		--master spark://spark-master:7077 \
+		--total-executor-cores 1 --executor-cores 1 \
+		--executor-memory 1g --driver-memory 1g \
 		/opt/spark/jobs/batch/job2_train_model.py
+inspect-model: ## Step 5: show the current champion model and the run archive
+	docker compose exec spark-master /opt/spark/bin/spark-submit \
+		--master spark://spark-master:7077 \
+		--total-executor-cores 1 --executor-cores 1 \
+		--executor-memory 768m --driver-memory 768m \
+		/opt/spark/jobs/tools/inspect_model.py
 psql-ops: ## SQL shell into the ops database (predictions live here)
 	docker compose exec postgres psql -U airflow -d fraud_ops
 psql-source: ## SQL shell into the bank source database (CDC watched tables)
