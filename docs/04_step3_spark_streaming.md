@@ -112,11 +112,18 @@ recomputed and upserted.
 > to resume.
 ---
 ## 4. Watch Spark process it
-Open **http://localhost:8080**.
-Under **Running Applications**, you should see `fraud-streaming-features`.
-Click it to inspect jobs, stages, executor memory, and task durations.
-A Structured Streaming query is still a series of small Spark batch jobs. Every
-10 seconds, the next set of Kafka offsets becomes one micro-batch.
+You now have two routes to the **live** driver UI:
+1. Open **http://localhost:8080**. Under **Running Applications**, find
+   `fraud-streaming-features` and click its application/UI link. The Spark
+   master reverse-proxies the Docker-internal driver under `/proxy/<app-id>`.
+2. Or open **http://localhost:4040** directly. Port 4040 is the UI belonging to
+   the first currently running Spark application—the continuous Step 3 stream.
+The driver UI has **Jobs, Stages, Storage, Environment, Executors, and SQL**
+tabs. A Structured Streaming query is still a series of small Spark batch jobs;
+every 10 seconds, the next set of Kafka offsets becomes one micro-batch.
+The UI exists only while that application is running. `make inspect-step3` is a
+short batch job and may finish before you click it; completed-application UIs
+need a Spark History Server, which is separate from the live master UI.
 ---
 ## 5. Inspect the Iceberg tables
 Open a second terminal in `project1_fraud` while streaming continues:

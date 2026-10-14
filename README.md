@@ -96,8 +96,9 @@ project1_fraud/
 │   ├── 00_start_here.md           <- what Docker/git/Kafka even ARE + installs
 │   ├── 01_architecture.md         <- every service explained + port map
 │   ├── 02_github_guide.md         <- git & GitHub from zero: first push walkthrough
-│   └── 03_cdc_explained.md        <- what CDC is and how Debezium fits in here
-|   └── 04_step3_spark_streaming.md <- Kafka → watermark → features → Iceberg runbook
+│   ├── 03_cdc_explained.md        <- what CDC is and how Debezium fits in here
+│   ├── 04_step3_spark_streaming.md <- Kafka → watermark → features → Iceberg runbook
+│   └── 05_step4_cdc_sync.md       <- CDC Debezium → Iceberg MERGE sync runbook
 │
 ├── docker/                        <- custom Docker images we build ourselves
 │   ├── spark/Dockerfile           <- Spark 3.5 + Iceberg + Kafka + S3 + JDBC jars
@@ -151,7 +152,7 @@ make stream                   # start the main Spark streaming job
 make cdc-sync                 # start the CDC dimension sync job
 # open the UIs (all with logins in .env):
 #   NiFi    http://localhost:8090/nifi
-#   Spark   http://localhost:8080
+#   Spark master/proxy http://localhost:8080  · live application http://localhost:4040
 #   MinIO   http://localhost:9001
 #   Airflow http://localhost:8085
 make train                    # (or wait for the nightly Airflow DAG)
