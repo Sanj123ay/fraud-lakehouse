@@ -24,6 +24,17 @@ class Settings:
     ICEBERG_WAREHOUSE = os.getenv("ICEBERG_WAREHOUSE", "s3a://warehouse/iceberg")
     CHECKPOINTS = os.getenv("CHECKPOINTS_ROOT", "s3a://checkpoints")
     MODEL_PATH = os.getenv("MODEL_PATH", "s3a://models/fraud_rf/latest")
+    # Model registry (Step 5): every run is archived, the champion is "latest".
+    MODEL_ROOT = os.getenv("MODEL_ROOT", "s3a://models/fraud_rf")
+    MODEL_METRICS_PATH = os.getenv("MODEL_METRICS_PATH", "s3a://models/fraud_rf/latest.metrics.json")
+    # Training rules -------------------------------------------------------------
+    TRAIN_MIN_ROWS = int(os.getenv("TRAIN_MIN_ROWS", "2000"))            # skip if less history
+    TRAIN_MIN_FRAUD_ROWS = int(os.getenv("TRAIN_MIN_FRAUD_ROWS", "50"))  # skip if too few frauds
+    TRAIN_HOLDOUT_FRACTION = float(os.getenv("TRAIN_HOLDOUT_FRACTION", "0.2"))  # newest 20% = test
+    MODEL_MIN_AUC = float(os.getenv("MODEL_MIN_AUC", "0.80"))           # quality floor
+    RF_NUM_TREES = int(os.getenv("RF_NUM_TREES", "100"))
+    RF_MAX_DEPTH = int(os.getenv("RF_MAX_DEPTH", "8"))
+    FRAUD_DECISION_THRESHOLD = float(os.getenv("FRAUD_DECISION_THRESHOLD", "0.5"))
     # Iceberg catalog and table names ----------------------------------------
     CATALOG = "lakehouse"
     T_RAW = "lakehouse.raw.transactions"

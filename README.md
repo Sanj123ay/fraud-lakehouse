@@ -98,7 +98,8 @@ project1_fraud/
 │   ├── 02_github_guide.md         <- git & GitHub from zero: first push walkthrough
 │   ├── 03_cdc_explained.md        <- what CDC is and how Debezium fits in here
 │   ├── 04_step3_spark_streaming.md <- Kafka → watermark → features → Iceberg runbook
-│   └── 05_step4_cdc_sync.md       <- CDC Debezium → Iceberg MERGE sync runbook
+│   ├── 05_step4_cdc_sync.md       <- CDC Debezium → Iceberg MERGE sync runbook
+│   └── 06_step5_training.md       <- nightly model training + champion/challenger runbook
 │
 ├── docker/                        <- custom Docker images we build ourselves
 │   ├── spark/Dockerfile           <- Spark 3.5 + Iceberg + Kafka + S3 + JDBC jars
@@ -119,12 +120,15 @@ project1_fraud/
 ├── spark_jobs/                    <- all PySpark code (the heart of the project)
 │   ├── common/config.py           <- ONE place for all endpoints/credentials
 │   ├── common/schemas.py          <- data contracts (transaction schema, CDC schema)
+│   ├── common/model_features.py   <- ONE feature definition shared by training + scoring
 │   ├── streaming/job1_streaming_features.py   <- main streaming pipeline (Step 3)
 │   ├── streaming/job3_cdc_customers_sync.py   <- CDC -> Iceberg dims MERGE (Step 4)
-│   └── batch/job2_train_model.py              <- nightly model training (Step 5)
+│   ├── batch/job2_train_model.py              <- nightly model training (Step 5)
+│   ├── batch/submit_training.sh               <- Airflow → Spark cluster submit wrapper
+│   └── tools/inspect_model.py                 <- show champion metrics + run archive
 │
 ├── airflow/dags/                  <- orchestration
-│   ├── dag_01_daily_training.py               <- retrains the model every night
+│   ├── dag_01_daily_training.py               <- trains the model every night (02:00 IST)
 │   └── dag_02_iceberg_maintenance.py          <- snapshot expiry / housekeeping
 │
 ├── scripts/
