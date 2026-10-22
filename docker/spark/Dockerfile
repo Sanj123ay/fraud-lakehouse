@@ -28,13 +28,13 @@ RUN apt-get update \
 # protection is meaningless (the container IS the app), so we delete the
 # marker and use pip directly — the same fix the Spark project documents in
 # SPARK-49068. rm -f makes this a harmless no-op on images without the marker.
-# Only ONE python lib needed: redis (online feature store writes in job1).
+# Python libs for the executors: redis (online store) and psycopg2 (Postgres predictions, Step 6).
 # pandas deliberately omitted — no job needs it, and fewer PyPI packages
 # means fewer ways for the build to break.
 RUN rm -f /usr/lib/python*/EXTERNALLY-MANAGED ; \
     python3 -m pip install --no-cache-dir --upgrade pip setuptools wheel && \
-    python3 -m pip install --no-cache-dir redis==5.0.8 && \
-    python3 -c "import redis; print('Spark image Python deps OK: redis', redis.__version__)"
+    python3 -m pip install --no-cache-dir redis==5.0.8 psycopg2-binary==2.9.9 && \
+    python3 -c "import redis, psycopg2; print('Spark image Python deps OK: redis', redis.__version__, 'psycopg2', psycopg2.__version__)"
 
 # Java libraries (exact, pinned versions, downloaded from Maven Central)
 #  - iceberg-spark-runtime : the lakehouse table format

@@ -49,7 +49,14 @@ class Settings:
     )
     PG_USER = os.getenv("POSTGRES_USER", "airflow")
     PG_PASSWORD = os.getenv("POSTGRES_PASSWORD", "airflow")
+    PG_HOST = os.getenv("PG_HOST", "postgres")
+    PG_PORT = int(os.getenv("PG_PORT", "5432"))
+    PG_DATABASE = os.getenv("PG_DATABASE", "fraud_ops")
     PG_PREDICTIONS_TABLE = "predictions"
+    # Step 6: how often the streaming job checks MinIO for a newer champion model.
+    MODEL_RELOAD_SECONDS = int(os.getenv("MODEL_RELOAD_SECONDS", "300"))
+    # Redis key lifetime for the "latest score per card" entries (7 days).
+    REDIS_TTL_SECONDS = int(os.getenv("REDIS_TTL_SECONDS", str(7 * 24 * 3600)))
     # Redis online store ------------------------------------------------------
     REDIS_HOST = os.getenv("REDIS_HOST", "redis")
     REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))

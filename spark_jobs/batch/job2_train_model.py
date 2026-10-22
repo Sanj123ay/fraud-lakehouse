@@ -48,6 +48,7 @@ from pyspark.sql import functions as F  # noqa: E402
 
 from common.config import Settings, build_spark  # noqa: E402
 from common.model_features import MODEL_FEATURE_COLUMNS, build_feature_stages  # noqa: E402
+from common.storage import read_json, write_json  # noqa: E402
 
 EXIT_OK = 0
 EXIT_QUALITY_GATE_FAILED = 2
@@ -64,35 +65,6 @@ FEATURE_SOURCE_COLUMNS = [
     "channel",
     "customer_risk_segment",
 ]
-
-
-# ---------------------------------------------------------------------------
-# Hadoop file helpers: tiny JSON read/write on MinIO (s3a://) via the JVM.
-# ---------------------------------------------------------------------------
-def _hadoop_handles(spark: SparkSession, uri: str):
-    jvm = spark.sparkContext._jvm
-    path = jvm.org.apache.hadoop.fs.Path(uri)
-    fs = path.getFileSystem(spark.sparkContext._jsc.hadoopConfiguration())
-    return path, fs
-
-
-def read_json(spark: SparkSession, uri: str) -> dict | None:
-    """Return the parsed JSON at `uri`, or None if it does not exist yet."""
-    path, fs = _hadoop_handles(spark, uri)
-    if not fs.exists(path):
-        return None
-    text = "\n".join(row.value for row in spark.read.text(uri).collect())
-    return json.loads(text)
-
-
-def write_json(spark: SparkSession, uri: str, payload: dict) -> None:
-    """Overwrite `uri` with pretty JSON."""
-    path, fs = _hadoop_handles(spark, uri)
-    out = fs.create(path, True)
-    try:
-        out.write(bytearray((json.dumps(payload, indent=2) + "\n").encode("utf-8")))
-    finally:
-        out.close()
 
 
 # ---------------------------------------------------------------------------

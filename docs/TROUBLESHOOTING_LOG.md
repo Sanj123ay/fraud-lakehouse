@@ -105,3 +105,34 @@ looks wrong to Airflow, check the end of the string first.
 
 **Plain-English lesson:** Windows and Linux end lines differently. A script that works on
 Windows can fail inside Linux containers. Shell scripts must use LF endings.
+
+---
+
+## E-006 — `pyspark.ml.functions` needs pandas, which the Spark image does not have
+
+- **Date / step:** 2026-10-22, Step 6 (real-time scoring), caught during local testing
+  before any cluster run
+- **Where it would have shown up:** `job1_streaming_features.py` at import time, on the
+  driver, with `ModuleNotFoundError: No module named 'pandas'`
+- **Cause:** `pyspark.ml.functions` (used for `vector_to_array`) imports pandas and numpy
+  when the module loads. The Spark image installs only `redis` and `psycopg2` on top of the
+  base image.
+- **Fix:** Read P(fraud) with a plain Python UDF instead:
+  `F.udf(lambda probability: float(probability[1]), "double")`.
+- **Status:** fixed (found in local testing; not yet seen on the cluster)
+
+**Plain-English lesson:** Importing one helper can silently pull in a whole library. When a
+container image is kept small on purpose, check what each import needs before using it.
+
+---
+
+## E-007 — Local Python workers without numpy (test setup only)
+
+- **Date / step:** 2026-10-22, Step 6 local tests
+- **Error message:** `ModuleNotFoundError: No module named 'numpy'` inside
+  `pyspark/worker.py`
+- **Cause:** Spark's Python UDF workers run the system `python3`, not the virtual
+  environment's Python used by the test driver.
+- **Fix:** Set `PYSPARK_PYTHON` to the same interpreter as the driver. This does not affect
+  the Docker images, which already use one Python for driver and workers.
+- **Status:** fixed (test-only)
