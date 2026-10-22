@@ -36,5 +36,5 @@ with DAG(
 ) as dag:
     train_fraud_model = BashOperator(
         task_id="train_fraud_model",
-        bash_command="bash /opt/airflow/spark_jobs/batch/submit_training.sh",
+        bash_command="set -e\nbash /opt/airflow/spark_jobs/batch/submit_training.sh\n",
     )
