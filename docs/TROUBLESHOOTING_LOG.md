@@ -81,3 +81,27 @@ looks wrong to Airflow, check the end of the string first.
   CDC-fed dimension join is not populating them. Not yet confirmed.
 - **Fix:** Open. Check with `make inspect-step4`.
 - **Status:** open
+
+---
+
+## E-005 — `set: pipefail: invalid option name` (line endings on Windows)
+
+- **Date / step:** 2026-10-22, Step 5 (`dag_01_daily_training`)
+- **Where it showed up:** Airflow task log, `submit_training.sh: line 16`
+- **Error message:**
+  ```text
+  /opt/airflow/spark_jobs/batch/submit_training.sh: line 16: set: pipefail
+  : invalid option name
+  ```
+- **Cause:** The script was saved with Windows line endings (CRLF). Bash reads
+  `pipefail` followed by a hidden carriage return (`\r`) and rejects the option name.
+  Git for Windows converts text files to CRLF on checkout by default, and the Airflow
+  container reads the files directly from the Windows disk through the volume mount.
+- **Fix:** Added `.gitattributes` with `* text=auto eol=lf` and per-type rules, so every
+  text file is checked out with LF. On your Windows machine, refresh the checkout (see
+  the Step 5 chat instructions) and rebuild the Airflow image if `start-platform.sh` was
+  also affected.
+- **Status:** fixed in repo (pending refresh of the Windows checkout)
+
+**Plain-English lesson:** Windows and Linux end lines differently. A script that works on
+Windows can fail inside Linux containers. Shell scripts must use LF endings.
