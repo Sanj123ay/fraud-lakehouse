@@ -25,6 +25,8 @@ how it was trained, how well it works, and what it must not be used for.
 - Shared feature definition: `spark_jobs/common/model_features.py`
 - Schedule: Airflow `dag_01_daily_training`, every day at 02:00 IST (20:30 UTC)
 - Inspect: `make inspect-model`
+- Served by: `spark_jobs/streaming/job1_streaming_features.py` (Step 6). The champion is loaded through `common/model_registry.py`, checked every 5 minutes, and applied to every micro-batch.
+- Outputs: `fraud_score` (P(fraud), 0..1), `is_fraud_pred` (score >= 0.5), `model_version`. Written to `lakehouse.raw.transactions`, `fraud_ops.predictions` (Postgres), and `fraud:card:<card_id>` (Redis).
 
 ## 3. Inputs (features)
 

@@ -48,6 +48,7 @@ from pyspark.sql import functions as F  # noqa: E402
 
 from common.config import Settings, build_spark  # noqa: E402
 from common.model_features import MODEL_FEATURE_COLUMNS, build_feature_stages  # noqa: E402
+from common.storage import read_json, write_json  # noqa: E402
 
 EXIT_OK = 0
 EXIT_QUALITY_GATE_FAILED = 2
@@ -67,37 +68,17 @@ FEATURE_SOURCE_COLUMNS = [
 
 
 # ---------------------------------------------------------------------------
-# Hadoop file helpers: tiny JSON read/write on MinIO (s3a://) via the JVM.
-# ---------------------------------------------------------------------------
-def _hadoop_handles(spark: SparkSession, uri: str):
-    jvm = spark.sparkContext._jvm
-    path = jvm.org.apache.hadoop.fs.Path(uri)
-    fs = path.getFileSystem(spark.sparkContext._jsc.hadoopConfiguration())
-    return path, fs
-
-
-def read_json(spark: SparkSession, uri: str) -> dict | None:
-    """Return the parsed JSON at `uri`, or None if it does not exist yet."""
-    path, fs = _hadoop_handles(spark, uri)
-    if not fs.exists(path):
-        return None
-    text = "\n".join(row.value for row in spark.read.text(uri).collect())
-    return json.loads(text)
-
-
-def write_json(spark: SparkSession, uri: str, payload: dict) -> None:
-    """Overwrite `uri` with pretty JSON."""
-    path, fs = _hadoop_handles(spark, uri)
-    out = fs.create(path, True)
-    try:
-        out.write(bytearray((json.dumps(payload, indent=2) + "\n").encode("utf-8")))
-    finally:
-        out.close()
-
-
-# ---------------------------------------------------------------------------
 # Data preparation
 # ---------------------------------------------------------------------------
+def _table_exists(spark: SparkSession, table_name: str) -> bool:
+    """Catalog-safe existence check: reading the schema fails cleanly if missing."""
+    try:
+        spark.table(table_name).schema
+        return True
+    except Exception:  # AnalysisException for missing tables
+        return False
+
+
 def load_labelled_history(spark: SparkSession, settings: Settings) -> DataFrame:
     """Feature rows joined to the ground-truth label from the raw table."""
     features = spark.table(settings.T_FEATURES).select(*FEATURE_SOURCE_COLUMNS)
@@ -163,7 +144,7 @@ def main() -> int:
     run_id = f"{datetime.now(timezone.utc):%Y%m%dT%H%M%SZ}-{uuid.uuid4().hex[:6]}"
     print(f"\n=== Fraud model training run {run_id} ===", flush=True)
 
-    if not (spark.catalog.tableExists(settings.T_FEATURES) and spark.catalog.tableExists(settings.T_RAW)):
+    if not (_table_exists(spark, settings.T_FEATURES) and _table_exists(spark, settings.T_RAW)):
         print("SKIPPED: feature/raw tables do not exist yet. Start the stream first (make stream).")
         return EXIT_OK
 

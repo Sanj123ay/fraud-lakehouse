@@ -1,0 +1,11 @@
+# Force LF line endings for every text file, on every OS.
+# Windows checkouts otherwise get CRLF, and bash fails on "set -o pipefail\r".
+* text=auto eol=lf
+*.sh text eol=lf
+*.py text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.sql text eol=lf
+*.groovy text eol=lf
+Dockerfile text eol=lf
+Makefile text eol=lf

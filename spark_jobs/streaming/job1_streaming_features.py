@@ -52,10 +52,14 @@ from pathlib import Path
 SPARK_JOBS_ROOT = Path(__file__).resolve().parents[1]
 if str(SPARK_JOBS_ROOT) not in sys.path:
     sys.path.insert(0, str(SPARK_JOBS_ROOT))
+import json
+from datetime import timezone
+
 from pyspark import StorageLevel
 from pyspark.sql import DataFrame, SparkSession, Window
 from pyspark.sql import functions as F
 from common.config import Settings, build_spark
+from common.model_registry import load_champion
 from common.schemas import TRANSACTION_SCHEMA
 RAW_COLUMNS = [
     "txn_id",
@@ -433,8 +437,162 @@ def merge_features(spark: SparkSession, updates: DataFrame, settings: Settings) 
         WHEN NOT MATCHED THEN INSERT ({insert_columns}) VALUES ({insert_values})
         """
     )
+# ---------------------------------------------------------------------------
+# Step 6: real-time scoring with the champion model from Step 5
+# ---------------------------------------------------------------------------
+def _utc_iso(value) -> str:
+    """Fixed-width UTC timestamp string, so string comparison equals time order."""
+    return value.replace(tzinfo=timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+
+
+# Pulls P(fraud) out of the model's probability vector. A plain Python UDF is used on
+# purpose: pyspark.ml.functions.vector_to_array imports pandas, which the Spark image does not ship.
+_fraud_probability = F.udf(lambda probability: float(probability[1]), "double")
+
+
+def score_batch(spark: SparkSession, incoming: DataFrame, features: DataFrame, settings: Settings):
+    """Score the new transactions of this micro-batch.
+
+    `features` holds the rolling features (count_5min, amount_sum_1h) for every
+    transaction whose window this batch touched, including the new ones. Joining
+    back to `incoming` selects the new transactions. The model pipeline recomputes
+    its own derived columns from those inputs (see common/model_features.py), so
+    scoring uses exactly the logic training used.
+    """
+    champion = load_champion(spark, settings)
+    if champion is None:
+        print("[scoring] no champion model published yet; skipping scores", flush=True)
+        return None
+    model, version = champion
+    candidates = features.join(incoming.select("txn_id"), "txn_id", "inner")
+    return (
+        model.transform(candidates)
+        .select(
+            "txn_id",
+            "card_id",
+            "customer_id",
+            "merchant_id",
+            "event_time",
+            "amount",
+            _fraud_probability(F.col("probability")).alias("fraud_score"),
+        )
+        .withColumn("is_fraud_pred", F.col("fraud_score") >= F.lit(settings.FRAUD_DECISION_THRESHOLD))
+        .withColumn("model_version", F.lit(version))
+        .withColumn("scored_at", F.current_timestamp())
+    )
+
+
+def merge_scores_into_raw(spark: SparkSession, scored: DataFrame, settings: Settings) -> None:
+    """Fill the score columns of raw rows that were inserted without a score.
+
+    Only rows whose fraud_score is still NULL are touched, so a replayed batch
+    cannot overwrite a score that was already recorded.
+    """
+    scored.select("txn_id", "fraud_score", "is_fraud_pred", "model_version").createOrReplaceTempView(
+        "raw_score_updates"
+    )
+    spark.sql(
+        f"""
+        MERGE INTO {settings.T_RAW} t
+        USING raw_score_updates s
+        ON t.txn_id = s.txn_id
+        WHEN MATCHED AND t.fraud_score IS NULL THEN UPDATE SET
+            t.fraud_score = s.fraud_score,
+            t.is_fraud_pred = s.is_fraud_pred,
+            t.model_version = s.model_version
+        """
+    )
+
+
+def _upsert_prediction_partition(rows, pg: dict) -> None:
+    """Runs on the executors: write one partition of predictions to Postgres.
+
+    ON CONFLICT DO NOTHING makes replays safe: the same transaction always gets
+    the same score, so the first write is kept.
+    """
+    import psycopg2
+    from psycopg2.extras import execute_values
+
+    values = [
+        (
+            row["txn_id"],
+            row["event_time"].replace(tzinfo=timezone.utc),
+            row["card_id"],
+            row["customer_id"],
+            row["merchant_id"],
+            row["amount"],
+            row["fraud_score"],
+            row["is_fraud_pred"],
+            row["model_version"],
+        )
+        for row in rows
+    ]
+    if not values:
+        return
+    sql = (
+        f"INSERT INTO {pg['table']} (txn_id, event_time, card_id, customer_id, merchant_id, "
+        "amount, fraud_score, is_fraud_pred, model_version) VALUES %s "
+        "ON CONFLICT (txn_id) DO NOTHING"
+    )
+    with psycopg2.connect(
+        host=pg["host"], port=pg["port"], dbname=pg["database"], user=pg["user"], password=pg["password"]
+    ) as conn, conn.cursor() as cur:
+        execute_values(cur, sql, values)
+
+
+def write_predictions_postgres(scored: DataFrame, settings: Settings) -> None:
+    pg = {
+        "host": settings.PG_HOST,
+        "port": settings.PG_PORT,
+        "database": settings.PG_DATABASE,
+        "user": settings.PG_USER,
+        "password": settings.PG_PASSWORD,
+        "table": settings.PG_PREDICTIONS_TABLE,
+    }
+    scored.select(
+        "txn_id", "event_time", "card_id", "customer_id", "merchant_id",
+        "amount", "fraud_score", "is_fraud_pred", "model_version",
+    ).foreachPartition(lambda rows: _upsert_prediction_partition(rows, pg))
+
+
+def publish_latest_scores_redis(scored: DataFrame, settings: Settings) -> None:
+    """Online store: `fraud:card:<card_id>` = the newest score for that card.
+
+    One row per card per batch is enough (batches are small), so the driver does
+    the write. An older event never overwrites a newer one already in Redis.
+    """
+    import redis
+
+    latest_per_card = (
+        scored.withColumn(
+            "rn",
+            F.row_number().over(
+                Window.partitionBy("card_id").orderBy(F.col("event_time").desc(), F.col("txn_id"))
+            ),
+        )
+        .where(F.col("rn") == 1)
+        .select("card_id", "txn_id", "event_time", "amount", "fraud_score", "is_fraud_pred", "model_version")
+        .collect()
+    )
+    client = redis.Redis(host=settings.REDIS_HOST, port=settings.REDIS_PORT, decode_responses=True)
+    for row in latest_per_card:
+        key = f"fraud:card:{row['card_id']}"
+        payload = {
+            "txn_id": row["txn_id"],
+            "event_time": _utc_iso(row["event_time"]),
+            "amount": float(row["amount"]),
+            "fraud_score": float(row["fraud_score"]),
+            "is_fraud_pred": bool(row["is_fraud_pred"]),
+            "model_version": row["model_version"],
+        }
+        existing = client.get(key)
+        if existing and json.loads(existing)["event_time"] >= payload["event_time"]:
+            continue  # a newer transaction for this card is already stored
+        client.set(key, json.dumps(payload), ex=settings.REDIS_TTL_SECONDS)
+
+
 def process_valid_batch(batch: DataFrame, batch_id: int) -> None:
-    """Idempotently commit one valid Kafka micro-batch and its features."""
+    """Idempotently commit one valid Kafka micro-batch, its features, and its scores."""
     if batch.isEmpty():
         print(f"[batch {batch_id}] no valid records", flush=True)
         return
@@ -451,15 +609,31 @@ def process_valid_batch(batch: DataFrame, batch_id: int) -> None:
         try:
             feature_count = features.count()
             merge_features(spark, features, settings)
+
+            scored = score_batch(spark, incoming, features, settings)
+            scored_count = 0
+            if scored is not None:
+                scored = scored.persist(StorageLevel.MEMORY_AND_DISK)
+                try:
+                    scored_count = scored.count()
+                    merge_scores_into_raw(spark, scored, settings)
+                    write_predictions_postgres(scored, settings)
+                    publish_latest_scores_redis(scored, settings)
+                    fraud_count = scored.where("is_fraud_pred").count()
+                    print(f"[batch {batch_id}] scored={scored_count} flagged_fraud={fraud_count}", flush=True)
+                finally:
+                    scored.unpersist()
         finally:
             features.unpersist()
         print(
             f"[batch {batch_id}] raw input={input_count}, "
-            f"feature rows inserted/recomputed={feature_count}",
+            f"feature rows inserted/recomputed={feature_count}, scored={scored_count}",
             flush=True,
         )
     finally:
         incoming.unpersist()
+
+
 def main() -> None:
     settings = Settings()
     spark = build_spark("fraud-streaming-features")

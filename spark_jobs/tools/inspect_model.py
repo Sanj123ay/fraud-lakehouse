@@ -14,8 +14,8 @@ SPARK_JOBS_ROOT = Path(__file__).resolve().parents[1]
 if str(SPARK_JOBS_ROOT) not in sys.path:
     sys.path.insert(0, str(SPARK_JOBS_ROOT))
 
-from batch.job2_train_model import read_json  # noqa: E402
 from common.config import Settings, build_spark  # noqa: E402
+from common.storage import read_json  # noqa: E402
 
 
 def list_run_files(spark, settings: Settings) -> list[str]:

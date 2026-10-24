@@ -99,7 +99,8 @@ project1_fraud/
 │   ├── 03_cdc_explained.md        <- what CDC is and how Debezium fits in here
 │   ├── 04_step3_spark_streaming.md <- Kafka → watermark → features → Iceberg runbook
 │   ├── 05_step4_cdc_sync.md       <- CDC Debezium → Iceberg MERGE sync runbook
-│   └── 06_step5_training.md       <- nightly model training + champion/challenger runbook
+│   ├── 06_step5_training.md       <- nightly model training + champion/challenger runbook
+│   └── 07_step6_realtime_scoring.md <- live scoring → Postgres + Redis runbook
 │
 ├── docker/                        <- custom Docker images we build ourselves
 │   ├── spark/Dockerfile           <- Spark 3.5 + Iceberg + Kafka + S3 + JDBC jars
@@ -121,6 +122,8 @@ project1_fraud/
 │   ├── common/config.py           <- ONE place for all endpoints/credentials
 │   ├── common/schemas.py          <- data contracts (transaction schema, CDC schema)
 │   ├── common/model_features.py   <- ONE feature definition shared by training + scoring
+│   ├── common/model_registry.py   <- loads the champion model for live scoring (Step 6)
+│   ├── common/storage.py          <- small JSON read/write helpers on MinIO
 │   ├── streaming/job1_streaming_features.py   <- main streaming pipeline (Step 3)
 │   ├── streaming/job3_cdc_customers_sync.py   <- CDC -> Iceberg dims MERGE (Step 4)
 │   ├── batch/job2_train_model.py              <- nightly model training (Step 5)
