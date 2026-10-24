@@ -445,10 +445,6 @@ def _utc_iso(value) -> str:
     return value.replace(tzinfo=timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 
 
-# Pulls P(fraud) out of the model's probability vector. A plain Python UDF is used on
-# purpose: pyspark.ml.functions.vector_to_array imports pandas, which the Spark image does not ship.
-_fraud_probability = F.udf(lambda probability: float(probability[1]), "double")
-
 
 def score_batch(spark: SparkSession, incoming: DataFrame, features: DataFrame, settings: Settings):
     """Score the new transactions of this micro-batch.
@@ -640,6 +636,8 @@ def main() -> None:
     spark.sparkContext.setLogLevel("WARN")
     create_iceberg_objects(spark, settings)
     parsed = read_and_parse_kafka(spark, settings)
+    # Pulls P(fraud) out of the model's probability vector. A plain Python UDF is used on
+    # purpose: pyspark.ml.functions.vector_to_array imports pandas, which the Spark image does not ship.
     _fraud_probability = F.udf(lambda probability: float(probability[1]), "double")
     valid = (
         parsed.where(F.length("validation_error") == 0)
