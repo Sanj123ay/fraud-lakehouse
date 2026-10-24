@@ -640,6 +640,7 @@ def main() -> None:
     spark.sparkContext.setLogLevel("WARN")
     create_iceberg_objects(spark, settings)
     parsed = read_and_parse_kafka(spark, settings)
+    _fraud_probability = F.udf(lambda probability: float(probability[1]), "double")
     valid = (
         parsed.where(F.length("validation_error") == 0)
         .select(
