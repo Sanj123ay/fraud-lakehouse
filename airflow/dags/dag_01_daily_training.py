@@ -36,8 +36,5 @@ with DAG(
 ) as dag:
     train_fraud_model = BashOperator(
         task_id="train_fraud_model",
-        # NOTE: the command must NOT end in ".sh". Airflow's BashOperator treats a
-        # string ending in .sh as a template *file name* and fails with
-        # "TemplateNotFound". The trailing newline below avoids that (see docs/TROUBLESHOOTING_LOG.md, E-001).
         bash_command="set -e\nbash /opt/airflow/spark_jobs/batch/submit_training.sh\n",
     )
