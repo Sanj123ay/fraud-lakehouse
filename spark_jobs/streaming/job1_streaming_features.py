@@ -61,6 +61,7 @@ from pyspark.sql import functions as F
 from common.config import Settings, build_spark
 from common.model_registry import load_champion
 from common.schemas import TRANSACTION_SCHEMA
+
 RAW_COLUMNS = [
     "txn_id",
     "card_id",
@@ -460,6 +461,8 @@ def score_batch(spark: SparkSession, incoming: DataFrame, features: DataFrame, s
         print("[scoring] no champion model published yet; skipping scores", flush=True)
         return None
     model, version = champion
+    # Avoid vector_to_array, which would require pandas in the Spark image.
+    fraud_probability = F.udf(lambda probability: float(probability[1]), "double")
     candidates = features.join(incoming.select("txn_id"), "txn_id", "inner")
     return (
         model.transform(candidates)
@@ -470,7 +473,7 @@ def score_batch(spark: SparkSession, incoming: DataFrame, features: DataFrame, s
             "merchant_id",
             "event_time",
             "amount",
-            _fraud_probability(F.col("probability")).alias("fraud_score"),
+            fraud_probability(F.col("probability")).alias("fraud_score"),
         )
         .withColumn("is_fraud_pred", F.col("fraud_score") >= F.lit(settings.FRAUD_DECISION_THRESHOLD))
         .withColumn("model_version", F.lit(version))
@@ -636,9 +639,6 @@ def main() -> None:
     spark.sparkContext.setLogLevel("WARN")
     create_iceberg_objects(spark, settings)
     parsed = read_and_parse_kafka(spark, settings)
-    # Pulls P(fraud) out of the model's probability vector. A plain Python UDF is used on
-    # purpose: pyspark.ml.functions.vector_to_array imports pandas, which the Spark image does not ship.
-    _fraud_probability = F.udf(lambda probability: float(probability[1]), "double")
     valid = (
         parsed.where(F.length("validation_error") == 0)
         .select(
